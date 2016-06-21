@@ -1,0 +1,6 @@
+version: 1.0
+shards:
+  fiberpool:
+    github: akitaonrails/fiberpool
+    commit: 83b5bef6698163a5ff970818a225e061a2817f3d
+

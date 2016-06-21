@@ -1,0 +1,12 @@
+name: fiber_freeze
+version: 0.1.0
+
+authors:
+  - Sebastian Johnsson <sebastian.johnsson@gmail.com>
+
+license: MIT
+
+dependencies:
+  fiberpool:
+    github: akitaonrails/fiberpool
+    branch: master
