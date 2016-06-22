@@ -1,42 +1,5 @@
 require "http/client"
 
-class Zlib::Inflate
-  def read(slice : Slice(UInt8))
-    check_open
-
-    while true
-      if @stream.avail_in == 0
-        @stream.next_in = @buf.to_unsafe
-        @stream.avail_in = @input.read(@buf.to_slice).to_u32
-        return 0 if @stream.avail_in == 0
-      end
-
-      @stream.avail_out = slice.size.to_u32
-      @stream.next_out = slice.to_unsafe
-
-      ret = LibZ.inflate(pointerof(@stream), LibZ::Flush::NO_FLUSH)
-      read_bytes = slice.size - @stream.avail_out
-      case ret
-      when LibZ::Error::NEED_DICT,
-           LibZ::Error::DATA_ERROR,
-           LibZ::Error::MEM_ERROR
-        raise Zlib::Error.new(ret, @stream)
-      when LibZ::Error::STREAM_END
-        return read_bytes
-      else
-        # LibZ.inflate might not write any data to the output slice because
-        # it might need more input. We can know this happened because `ret`
-        # is not STREAM_END.
-        if read_bytes == 0
-          next
-        else
-          return read_bytes
-        end
-      end
-    end
-  end
-end
-
 {% if LibSSL::OPENSSL_102 %}
   puts "\n\nLibssl >= 1.0.2 was detected!\n\n\n"
 {% else %}
@@ -44,7 +7,7 @@ end
 {% end %}
 
 pool_size   =   100
-urls        =   File.read_lines("./data/groups/https_11.txt").map { |url| url.strip }
+urls        =   File.read_lines("./data/https_urls.txt").map { |url| url.strip }
 channel     =   Channel(Nil).new
 
 group_index =   0
