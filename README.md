@@ -7,7 +7,10 @@ The exact same error occurs when using [fiberpool](https://github.com/akitaonrai
 ## Usage / Reproducing
     $ git clone git://github.com/Agiley/fiber-freeze.git
     $ cd fiber-freeze
-    $ crystal deps
+
+Fetch https urls using a minimal example (Crystal freezes/hangs after a few minutes):
+
+    $ crystal examples/simple_https_with_fibers.cr
 
 Fetch https urls using fibers (freezes/hangs after a few minutes):
 
