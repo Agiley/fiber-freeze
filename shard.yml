@@ -5,8 +5,3 @@ authors:
   - Sebastian Johnsson <sebastian.johnsson@gmail.com>
 
 license: MIT
-
-dependencies:
-  fiberpool:
-    github: akitaonrails/fiberpool
-    branch: master

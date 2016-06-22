@@ -1,49 +1,59 @@
-require "fiberpool"
 require "http/client"
 require "xml"
 
 module FiberFreeze
   class Client
     @queue    =   Set(String).new
-    @crawled  =   Set(String).new
-    @mutex    =   Mutex.new
     
-    def initialize(@protocol = "https", @use_fibers = true, @pool_size = 50)
-      @queue.merge(File.read_lines("./data/#{protocol}_urls.txt").map { |url| url.strip })
+    def initialize(@protocol = "https", @use_fibers = true, @pool_size = 100)
+      @queue.merge(File.read_lines("./data/#{@protocol}_urls.txt").map { |url| url.strip })
+      #File.delete("./data/#{@protocol}_urls.txt") if File.exists?("./data/#{@protocol}_urls.txt")
     end
     
     def crawl
       output_macro_status
       
-      while !@queue.empty?
-        puts "\n@queue size: #{@queue.size}\n\n\n"
+      urls            =   Set(String).new
+      
+      #dump_urls(@queue)
+      
+      if @use_fibers
+        crawled       =   crawl_using_fibers(@queue)
+        urls.merge(crawled)
         
-        if @use_fibers
-          pool = Fiberpool.new(@queue, @pool_size)
-          pool.run do |url|
-            crawl_url(url)
-          end
-        else
-          @queue.each do |url|
-            crawl_url(url)
-          end
+        #dump_urls(crawled)
+      else
+        @queue.each do |url|
+          crawled     =   crawl_url(url)
+          urls.merge(crawled)
+          
+          #dump_urls(crawled)
         end
       end
     end
     
-    def output_macro_status
-      {% if LibSSL::OPENSSL_102 %}
-        puts "\n\nLibssl >= 1.0.2 was detected!\n\n\n"
-      {% else %}
-        puts "\n\nLibssl >= 1.0.2 wasn't detected!\n\n\n"
-      {% end %}
+    private def crawl_using_fibers(queue, pool_size = @pool_size)
+      urls            =   Set(String).new
+      channel         =   Channel(Set(String)).new
+      
+      queue.each_slice(pool_size) do |queue_group|
+        queue_group.each do |url|
+          spawn do
+            channel.send(crawl_url(url))
+          end
+        end
+        
+        queue_group.size.times do
+          received    =   channel.receive
+          urls.merge(received) if received && received.any?
+        end
+      end
+      
+      return urls
     end
     
-    def crawl_url(url)
-      @mutex.synchronize do
-        @crawled.add(url)
-        @queue.delete(url)
-      end
+    private def crawl_url(url)
+      urls            =   Set(String).new
       
       parsed          =   get_response(url)
       
@@ -52,24 +62,42 @@ module FiberFreeze
       links.each do |link|
         href          =   link["href"]?
         
-        if href && absolute_url?(href) && using_desired_procotol?(href)
-          @mutex.synchronize do
-            @queue.add(href) unless @crawled.includes?(href)
-          end
+        if href && absolute_url?(href) && crawlable?(href) && using_desired_procotol?(href)
+          urls.add(href)
         end
       end if links && links.any?
+      
+      return urls
     end
     
-    def absolute_url?(url)
+    private def dump_urls(urls)
+      File.open("./data/#{@protocol}_urls.txt", "a") do |f|
+        f.print urls.join("\n")
+      end
+    end
+    
+    private def output_macro_status
+      {% if LibSSL::OPENSSL_102 %}
+        puts "\n\nLibssl >= 1.0.2 was detected!\n\n\n"
+      {% else %}
+        puts "\n\nLibssl >= 1.0.2 wasn't detected!\n\n\n"
+      {% end %}
+    end
+    
+    private def absolute_url?(url)
       !(url =~ /^http(s)?:\/\//i).nil?
     end
     
-    def using_desired_procotol?(url) : Bool
+    private def crawlable?(url)
+      (url =~ /\.(css|js|ico|bmp|gif|jpg|jpeg|png|psd|psp|pspimage|thm|tif|yuv|avi|mpg|mpeg|mkv|wmv|flv|mp4|asf|mp3|wav|ogg|doc|docx|pdf|ppt|ppx|zip|tar|tar\.gz|tar\.bz|gz|rar|bz).*$/i).nil?
+    end
+    
+    private def using_desired_procotol?(url) : Bool
       uri               =   URI.parse(url)
       (uri.try &.scheme == @protocol)
     end
     
-    def get_response(url, redirect_limit = 5)
+    private def get_response(url)
       parsed            =   nil
       
       if using_desired_procotol?(url)    
@@ -88,20 +116,13 @@ module FiberFreeze
         
         begin
           response      =   http_client.get(path, headers: headers)
-      
-          case response.status_code
-            when 301
-              redirect_limit -= 1
-              parsed    =   get_response(response.headers["Location"], redirect_limit) if response.headers["Location"]? && redirect_limit > 0
-            when 200
-              parsed    =   XML.parse_html(response.body)
-          end
+          parsed        =   response.status_code == 200 ? XML.parse_html(response.body) : nil
       
         rescue
           puts "#{Time.now}: Error occurred. Proceeding..."
         
         ensure
-          http_client.close
+          http_client.close rescue nil
         end
       end
       
