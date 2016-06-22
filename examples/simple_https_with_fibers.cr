@@ -1,5 +1,11 @@
 require "http/client"
 
+{% if LibSSL::OPENSSL_102 %}
+  puts "\n\nLibssl >= 1.0.2 was detected!\n\n\n"
+{% else %}
+  puts "\n\nLibssl >= 1.0.2 wasn't detected!\n\n\n"
+{% end %}
+
 pool_size   =   100
 urls        =   File.read_lines("./data/https_urls.txt").map { |url| url.strip }
 channel     =   Channel(Nil).new
